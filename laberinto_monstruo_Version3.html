@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Laberinto: Monstruo y Tesoros</title>
+    <style>
+        body { background: #eef; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #panel { background: #fff; border: 2px solid #222; }
+        #info { font-family: sans-serif; font-size: 18px; margin:10px; }
+        #creado { 
+            text-align: center;
+            margin-top: 10px;
+            font-family: 'Arial Rounded MT Bold',Arial,sans-serif;
+            font-size: 18px;
+            color: #444;
+            letter-spacing: 1.5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info"></div>
+    <canvas id="panel" width="400" height="400"></canvas>
+    <div id="creado">Creado por Jose y Omar</div>
+    <script>
+    // Laberinto: 0-camino, 1-pared, 2-tesoro
+    const MAZE_ORIGINAL = [
+        [0,1,1,1,2,1,1,2,1,1],
+        [0,0,0,1,0,0,1,0,0,1],
+        [1,1,0,1,0,1,1,1,0,1],
+        [2,0,0,0,0,0,1,0,0,2],
+        [1,0,1,1,1,0,1,1,1,1],
+        [1,0,1,2,0,0,0,1,0,2],
+        [1,0,1,1,1,1,0,1,0,1],
+        [1,0,0,0,2,1,0,0,0,1],
+        [1,0,1,1,0,1,1,1,0,0],
+        [1,1,1,1,1,1,1,1,1,1]
+    ];
+    const SIZE = 40, WIDTH = 10, HEIGHT = 10;
+
+    let MAZE = JSON.parse(JSON.stringify(MAZE_ORIGINAL));
+    let player = { x:0, y:0, color:"#3bb551", score:0 };
+    let monster = { x:9, y:9 };  // Monstruo inicia en esquina opuesta
+
+    let gameOver = false;
+
+    function drawMaze() {
+        const ctx = document.getElementById('panel').getContext('2d');
+        ctx.clearRect(0, 0, 400, 400);
+        // Fondo
+        for(let y=0; y<HEIGHT; y++) for(let x=0; x<WIDTH; x++) {
+            if(MAZE[y][x]===1){
+                ctx.fillStyle="#222";
+                ctx.fillRect(x*SIZE, y*SIZE, SIZE, SIZE);
+            } else {
+                ctx.fillStyle="#fff";
+                ctx.fillRect(x*SIZE, y*SIZE, SIZE, SIZE);
+            }
+            if(MAZE[y][x]===2){
+                ctx.fillStyle="#FC0";
+                ctx.beginPath();
+                ctx.arc(x*SIZE+SIZE/2,y*SIZE+SIZE/2,14,0,2*Math.PI);
+                ctx.fill();
+                ctx.font="20px sans-serif";
+                ctx.textAlign="center";
+                ctx.textBaseline="middle";
+                ctx.fillStyle="#CA9800";
+                ctx.fillText("⭐", x*SIZE+SIZE/2, y*SIZE/2+SIZE/2);
+            }
+            ctx.strokeStyle="#777";
+            ctx.strokeRect(x*SIZE, y*SIZE, SIZE, SIZE);
+        }
+        // Monstruo
+        drawMonster(ctx, monster.x, monster.y);
+        // Jugador
+        drawPlayer(ctx, player.x, player.y, player.color);
+    }
+    function drawPlayer(ctx, px, py, color) {
+        ctx.save();
+        ctx.translate(px*SIZE+SIZE/2, py*SIZE+SIZE/2);
+        ctx.strokeStyle="#111"; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(0, 8, 13, 0, 2*Math.PI); ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.ellipse(0, 10, 13, 16, 0, 0, 2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, -7, 13, 0, 2*Math.PI); ctx.fill();
+        ctx.strokeStyle="#333"; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(0,-7,13,0,2*Math.PI); ctx.stroke();
+        // ojos y sonrisa
+        ctx.fillStyle = "#111";
+        ctx.beginPath(); ctx.ellipse(-4, -10, 2.5, 3.7, 0, 0, 2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(4, -10, 2.5, 3.7, 0, 0, 2*Math.PI); ctx.fill();
+        ctx.strokeStyle="#111"; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.arc(0, -2, 6, 0.23*Math.PI, 0.77*Math.PI); ctx.stroke();
+        ctx.restore();
+    }
+    function drawMonster(ctx, px, py) {
+        ctx.save();
+        ctx.translate(px*SIZE+SIZE/2, py*SIZE+SIZE/2);
+        // cuerpo
+        ctx.beginPath(); ctx.arc(0, 0, 18, 0, 2*Math.PI);
+        ctx.fillStyle = "#c22";
+        ctx.fill();
+        ctx.strokeStyle="#800"; ctx.lineWidth=3; ctx.stroke();
+        // ojos
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.ellipse(-6,-4, 5,7, 0,0,2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(6,-4, 5,7, 0,0,2*Math.PI); ctx.fill();
+        ctx.fillStyle="#222";
+        ctx.beginPath(); ctx.ellipse(-6,-3, 2,3, 0,0,2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(6,-3, 2,3, 0,0,2*Math.PI); ctx.fill();
+        // boca
+        ctx.strokeStyle="#333"; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(0, 6, 8, 0.15*Math.PI, 0.85*Math.PI);
+        ctx.stroke();
+        ctx.restore();
+    }
+    function movePlayer(dx, dy) {
+        if(gameOver) return false;
+        const nx = player.x + dx, ny = player.y + dy;
+        if(nx<0||nx>=WIDTH||ny<0||ny>=HEIGHT) return false;
+        if (MAZE[ny][nx]!==1) {
+            player.x = nx; player.y = ny;
+            if(MAZE[ny][nx]===2){
+                player.score++; MAZE[ny][nx]=0;
+                if(contarTesoros()===0){
+                    gameOver = true;
+                    drawMaze();
+                    updateInfo();
+                    setTimeout(() => alert("¡Ganaste! Recogiste todos los tesoros."), 100);
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+    function contarTesoros(){
+        let c=0; for(let y=0;y<HEIGHT;y++) for(let x=0;x<WIDTH;x++) if(MAZE[y][x]==2) c++; return c;
+    }
+    function updateInfo(){
+        document.getElementById('info').innerHTML =
+            `<span style="color:#3bb551;">Jugador (Verde): ${player.score}</span> &nbsp;|&nbsp; <span style="color:#c22;">Monstruo</span> &nbsp;|&nbsp; <span>Tesoros: ${contarTesoros()}</span><br />`+
+            `Usa las teclas de flechas para moverte.`;
+    }
+    function moveMonster() {
+        if(gameOver) return;
+        // Inteligencia muy simple: mover en dirección al jugador evitando paredes
+        let dx = player.x - monster.x;
+        let dy = player.y - monster.y;
+        let options = [];
+        if(dx !== 0) options.push({dx: Math.sign(dx), dy: 0});
+        if(dy !== 0) options.push({dx: 0, dy: Math.sign(dy)});
+        // Si ambos caminos posibles, elige al azar
+        shuffle(options);
+        for(let op of options) {
+            let nx = monster.x + op.dx, ny = monster.y + op.dy;
+            if(nx>=0 && nx<WIDTH && ny>=0 && ny<HEIGHT && MAZE[ny][nx]!==1 && !(nx===player.x && ny===player.y)) {
+                monster.x = nx; monster.y = ny;
+                break;
+            }
+        }
+        // Si no se movió, prueba todos los vecinos hasta encontrar uno válido (para evitar atascos)
+        if(monster.x !== player.x || monster.y !== player.y) {
+            let fallback = [
+                {dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}
+            ];
+            shuffle(fallback);
+            for(let op of fallback){
+                let nx = monster.x + op.dx, ny = monster.y + op.dy;
+                if(nx>=0 && nx<WIDTH && ny>=0 && ny<HEIGHT && MAZE[ny][nx]!==1 && !(nx===player.x && ny===player.y)) {
+                    monster.x = nx; monster.y = ny;
+                    break;
+                }
+            }
+        }
+        // Verificar colisión
+        if(monster.x === player.x && monster.y === player.y) {
+            gameOver = true;
+            drawMaze();
+            updateInfo();
+            setTimeout(() => alert("¡Te atrapó el monstruo!"), 100);
+        }
+    }
+    function shuffle(a) {
+        for(let i=a.length-1;i>0;i--) {
+            let j = Math.floor(Math.random()*(i+1));
+            [a[i],a[j]]=[a[j],a[i]];
+        }
+    }
+    document.addEventListener('keydown',function(e){
+        if(gameOver) return;
+        let moved=false;
+        if(e.key==="ArrowUp") moved=movePlayer(0,-1);
+        if(e.key==="ArrowDown") moved=movePlayer(0,1);
+        if(e.key==="ArrowLeft") moved=movePlayer(-1,0);
+        if(e.key==="ArrowRight") moved=movePlayer(1,0);
+        if(moved){
+            moveMonster();
+            drawMaze();
+            updateInfo();
+        }
+    });
+
+    // Inicializa
+    drawMaze();
+    updateInfo();
+    </script>
+</body>
+</html>
